@@ -1,0 +1,40 @@
+# Encodes the module boundaries the design docs already state as rules but
+# nothing enforced before now — tech design §1.3 (SRP table) and LLD §0/§3.1
+# ("GoldRepository: one interface, two callers"). `depends_on` is an
+# allowlist: anything not listed is a violation `tach check` will catch.
+source_roots = ["."]
+
+[[modules]]
+path = "src.models"
+utility = true            # pure data types — importable by every module, depends on nothing
+
+[[modules]]
+path = "src.config"
+utility = true            # settings — importable by every module, depends on nothing
+
+[[modules]]
+path = "src.connectors"
+depends_on = ["src.models"]
+
+[[modules]]
+path = "src.ml"
+depends_on = ["src.models"]
+
+[[modules]]
+path = "src.pipeline"
+# The one place DE orchestration and DS algorithms meet (LLD §0) — allowed
+# to reach connectors and ml clients, but never gold (it writes gold's
+# tables directly at the DB/dbt layer, not through the Python repository).
+depends_on = ["src.models", "src.connectors", "src.ml"]
+
+[[modules]]
+path = "src.gold"
+depends_on = ["src.models"]
+
+[[modules]]
+path = "src.bot"
+depends_on = ["src.gold"]  # "one query layer, two thin clients" — no pipeline/connectors/ml access
+
+[[modules]]
+path = "src.dashboard"
+depends_on = ["src.gold"]  # same rule as src.bot

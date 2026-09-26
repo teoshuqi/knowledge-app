@@ -63,6 +63,8 @@ run "bandit"        -- "$BIN/bandit" -c pyproject.toml -r $TARGETS -q
 run "xenon (complexity budget: max B per function, A on average)" \
     -- "$BIN/xenon" --max-absolute B --max-modules A --max-average A $TARGETS
 run "pip-audit" -- "$BIN/pip-audit"
+run "tach check (module boundaries — tech design §1.3, LLD §0/§3.1)" \
+    -- "$BIN/tach" check
 run "pytest"    -- "$BIN/pytest" --cov=src --cov-report=term-missing -q
 
 if [[ $FAST -eq 0 ]]; then
