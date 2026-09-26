@@ -28,6 +28,10 @@ dev = [
     "vulture>=2.11",
     "pip-audit>=2.7",
     "tach>=0.35",
+    "shellcheck-py>=0.10",  # pip wheel bundling the real shellcheck binary — no brew/apt needed
+    "shfmt-py>=4.2",        # same, for the shfmt binary
+    "sqlfluff>=4.3",
+    "yamllint>=1.35",
 ]
 
 [tool.pytest.ini_options]
@@ -47,6 +51,19 @@ exclude_dirs = ["tests", ".venv"]
 # self-checks in one-off scripts and gates (ponytail style) — not a
 # security concern here, so it'd be pure noise every time.
 skips = ["B101"]
+
+[tool.sqlfluff.core]
+dialect = "postgres"  # plain DDL for now; revisit to "dbt" once dbt/ exists (Phase 4) and .sql is Jinja-templated
+# LT01/LT02 fight this file's deliberate column alignment; verified via a
+# real `sqlfluff fix` diff that its rewrite is a regression, not a style
+# nit — it relocates trailing inline comments onto the wrong column
+# (e.g. embedding's comment ends up read as key_entities's). LT05
+# (line length) is too strict for documentation-heavy DDL comments.
+# RF04 (keywords as identifiers) flags `key`/`value`/`action`/`summary` —
+# real column names already used across every design doc and draft file;
+# renaming now would ripple far outside CI-tooling scope for a portability
+# concern this Postgres-only project doesn't have.
+exclude_rules = "LT01,LT02,LT05,RF04"
 
 [tool.interrogate]
 # Ponytail style deliberately keeps docstrings sparse — only where the WHY

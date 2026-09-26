@@ -1,3 +1,4 @@
+---
 # Phase 0 skeleton (F-03): postgres + prefect-server + prefect-worker only.
 # bot, dashboard, and the optional llama-server are added in H-03 once those
 # tracks exist (tech design §2.7/§2.8) — no Kubernetes, single host throughout.
@@ -27,7 +28,10 @@ services:
     environment:
       PREFECT_SERVER_API_HOST: 0.0.0.0
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      test: [
+        "CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')",
+      ]
       interval: 10s
       timeout: 5s
       retries: 10

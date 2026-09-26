@@ -5,18 +5,27 @@
 #     produce an artifact for a human to look at, and don't have a
 #     principled pass/fail threshold at this project's current size.
 #
+# Covers Python (src/, scripts/), bash (scripts/*.sh), SQL (sql/), and
+# YAML (docker-compose.yml).
+#
 # Every tool here was run for real against this repo before being wired in —
-# none of this is a guess at what "should" work.
+# none of this is a guess at what "should" work. Two things were tuned away
+# from tool defaults because they actively fought this repo's conventions,
+# not just differed in style: sqlfluff's auto-fixer relocates inline
+# comments onto the wrong column (see .sqlfluff exclusions below — this was
+# caught by diffing its output, not assumed), and cohesion (evaluated,
+# not wired in at all) scores every Pydantic model and interface-stub class
+# as 0% by construction, which is this codebase's normal shape, not a defect.
 #
 # Usage: scripts/ci_check.sh [--fast]
 #   --fast  skip the two slowest checks (pytype, cProfile) — for local use
 #           while iterating; CI itself always runs the full set.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 BIN="${CI_PYTHON_BIN:-.venv/bin}"
-TARGETS="src scripts"
+TARGETS=(src scripts)
 ARTIFACTS=".ci-artifacts"
 FAST=0
 [[ "${1:-}" == "--fast" ]] && FAST=1
@@ -31,7 +40,8 @@ hr() { printf '%s\n' "----------------------------------------------------------
 # check doesn't hide the rest of the report) — the script only exits
 # non-zero at the very end, once everything has had a chance to run.
 run() {
-    local name="$1"; shift
+    local name="$1"
+    shift
     [[ "$1" == "--" ]] && shift
     hr
     echo "[$name]"
@@ -47,7 +57,8 @@ run() {
 # Runs an informational check. Always reports PASS/DONE regardless of the
 # command's own exit code — these produce a number or artifact, not a gate.
 soft() {
-    local name="$1"; shift
+    local name="$1"
+    shift
     [[ "$1" == "--" ]] && shift
     hr
     echo "[$name] (informational — does not affect exit code)"
@@ -56,16 +67,24 @@ soft() {
 
 # ---------------------------------------------------------------- HARD GATES
 
-run "black --check" -- "$BIN/black" --check --target-version py312 $TARGETS tests
-run "ruff check"    -- "$BIN/ruff" check $TARGETS tests
-run "mypy"          -- "$BIN/mypy" $TARGETS
-run "bandit"        -- "$BIN/bandit" -c pyproject.toml -r $TARGETS -q
+run "black --check" -- "$BIN/black" --check --target-version py312 "${TARGETS[@]}" tests
+run "ruff check" -- "$BIN/ruff" check "${TARGETS[@]}" tests
+run "mypy" -- "$BIN/mypy" "${TARGETS[@]}"
+run "bandit" -- "$BIN/bandit" -c pyproject.toml -r "${TARGETS[@]}" -q
 run "xenon (complexity budget: max B per function, A on average)" \
-    -- "$BIN/xenon" --max-absolute B --max-modules A --max-average A $TARGETS
+    -- "$BIN/xenon" --max-absolute B --max-modules A --max-average A "${TARGETS[@]}"
 run "pip-audit" -- "$BIN/pip-audit"
 run "tach check (module boundaries — tech design §1.3, LLD §0/§3.1)" \
     -- "$BIN/tach" check
-run "pytest"    -- "$BIN/pytest" --cov=src --cov-report=term-missing -q
+run "pytest" -- "$BIN/pytest" --cov=src --cov-report=term-missing -q
+
+# --- non-Python files: bash, SQL, YAML ---
+run "shellcheck" -- "$BIN/shellcheck" scripts/*.sh
+run "shfmt --diff (4-space indent, matching this repo's Python convention)" \
+    -- "$BIN/shfmt" -i 4 -d scripts/*.sh
+run "sqlfluff lint (config: pyproject.toml [tool.sqlfluff.core])" \
+    -- "$BIN/sqlfluff" lint sql/
+run "yamllint" -- "$BIN/yamllint" docker-compose.yml
 
 if [[ $FAST -eq 0 ]]; then
     # pytype overlaps mypy but catches different things (flow-sensitive
@@ -74,22 +93,22 @@ if [[ $FAST -eq 0 ]]; then
     # import-error is disabled: this project adds dependencies phase by
     # phase (pyproject.toml's own convention), so code for a later phase
     # legitimately imports a package not installed yet.
-    run "pytype" -- "$BIN/pytype" -d import-error -k $TARGETS
+    run "pytype" -- "$BIN/pytype" -d import-error -k "${TARGETS[@]}"
 fi
 
 # ---------------------------------------------------------------- SOFT CHECKS
 
 soft "radon cc (full report; xenon above is the actual gate)" \
-    -- "$BIN/radon" cc $TARGETS -a
+    -- "$BIN/radon" cc "${TARGETS[@]}" -a
 soft "radon mi (maintainability index)" \
-    -- "$BIN/radon" mi $TARGETS
+    -- "$BIN/radon" mi "${TARGETS[@]}"
 soft "interrogate (docstring coverage — informational; this codebase's own convention is sparse, WHY-only docstrings, not blanket coverage)" \
-    -- "$BIN/interrogate" -v $TARGETS
+    -- "$BIN/interrogate" -v "${TARGETS[@]}"
 soft "vulture (dead code — expect false positives on interface stub params, e.g. GoldRepository's method signatures and BERTopic's BaseRepresentation override; read before deleting anything it flags)" \
-    -- "$BIN/vulture" $TARGETS --min-confidence 80
+    -- "$BIN/vulture" "${TARGETS[@]}" --min-confidence 80
 
 soft "pyreverse (UML class diagram -> $ARTIFACTS/classes.dot, packages.dot)" \
-    -- bash -c "$BIN/pyreverse -o dot -d '$ARTIFACTS' \$(find $TARGETS -name '*.py')"
+    -- bash -c "$BIN/pyreverse -o dot -d '$ARTIFACTS' \$(find ${TARGETS[*]} -name '*.py')"
 
 if [[ $FAST -eq 0 ]]; then
     soft "cProfile (test-suite profile -> $ARTIFACTS/pytest.prof; open with 'python -m pstats')" \

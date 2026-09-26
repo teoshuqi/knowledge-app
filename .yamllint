@@ -1,0 +1,7 @@
+extends: default
+
+rules:
+  # 80 is too tight for compose files (env var names, healthcheck commands);
+  # 120 matches what's actually reasonable here without fighting every line.
+  line-length:
+    max: 120
