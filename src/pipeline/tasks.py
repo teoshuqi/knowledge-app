@@ -12,9 +12,10 @@ One task, one job: fetch, OR process, OR cluster, OR discover. None of these
 call each other directly — flows/flows.py wires the order. That's what lets
 any single one be re-triggered alone.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from prefect import get_run_logger, task
 
@@ -31,7 +32,7 @@ def _get_watermark(db, task_name: str) -> datetime:
         "SELECT last_processed_at FROM gold.pipeline_watermarks WHERE task_name = %s",
         (task_name,),
     )
-    return row["last_processed_at"] if row else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return row["last_processed_at"] if row else datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _advance_watermark(db, task_name: str, up_to: datetime) -> None:
@@ -56,12 +57,23 @@ def fetch_source(db, connector: Connector, since: datetime | None = None) -> Non
             """INSERT INTO bronze.raw_items (source_id, source_type, fetched_at, external_id, raw_payload, fetch_status)
                VALUES (%s, %s, %s, %s, %s, 'ok')
                ON CONFLICT (source_id, external_id) DO NOTHING""",
-            (raw.source_id, raw.source_type, raw.fetched_at, raw.external_id, raw.raw_payload),
+            (
+                raw.source_id,
+                raw.source_type,
+                raw.fetched_at,
+                raw.external_id,
+                raw.raw_payload,
+            ),
         )
 
     if not is_replay:
-        _advance_watermark(db, f"fetch:{connector.source_id}", datetime.now(timezone.utc))
-    logger.info("fetch_source(%s): %d items, replay=%s", connector.source_id, len(items), is_replay)
+        _advance_watermark(db, f"fetch:{connector.source_id}", datetime.now(UTC))
+    logger.info(
+        "fetch_source(%s): %d items, replay=%s",
+        connector.source_id,
+        len(items),
+        is_replay,
+    )
 
 
 @task(retries=1)
@@ -81,12 +93,16 @@ def process_batch(
     watermark = since or _get_watermark(db, "process")
 
     rows = db.fetch_all(
-        "SELECT * FROM bronze.raw_items WHERE fetched_at > %s ORDER BY fetched_at", (watermark,)
+        "SELECT * FROM bronze.raw_items WHERE fetched_at > %s ORDER BY fetched_at",
+        (watermark,),
     )
     for raw in rows:
         draft = _to_canonical_draft(raw)  # per-source, via the connector registry
         if draft.is_near_empty:
-            db.execute("UPDATE bronze.raw_items SET fetch_status = 'empty' WHERE id = %s", (raw["id"],))
+            db.execute(
+                "UPDATE bronze.raw_items SET fetch_status = 'empty' WHERE id = %s",
+                (raw["id"],),
+            )
             continue
 
         existing = db.fetch_one(
@@ -103,7 +119,9 @@ def process_batch(
         try:
             enrichment: Enrichment = llm.extract(_enrichment_prompt(draft), Enrichment)
         except ExtractionFailed:
-            logger.warning("enrichment failed for %s, flagging not dropping", draft.canonical_url)
+            logger.warning(
+                "enrichment failed for %s, flagging not dropping", draft.canonical_url
+            )
             continue
         embedding = embedder.embed([f"{draft.title} {enrichment.summary}"])[0]
 
@@ -113,14 +131,23 @@ def process_batch(
                 summary, key_entities, embedding, source_ids, item_type)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (canonical_url) DO NOTHING""",
-            (draft.canonical_url, draft.title, _simhash(draft.title), draft.author,
-             draft.published_at, draft.cleaned_text, enrichment.summary,
-             [e.model_dump() for e in enrichment.key_entities], embedding,
-             [draft.source_id], draft.item_type),
+            (
+                draft.canonical_url,
+                draft.title,
+                _simhash(draft.title),
+                draft.author,
+                draft.published_at,
+                draft.cleaned_text,
+                enrichment.summary,
+                [e.model_dump() for e in enrichment.key_entities],
+                embedding,
+                [draft.source_id],
+                draft.item_type,
+            ),
         )
 
     if not is_replay:
-        _advance_watermark(db, "process", datetime.now(timezone.utc))
+        _advance_watermark(db, "process", datetime.now(UTC))
 
 
 @task(retries=1)
@@ -133,8 +160,12 @@ def cluster_stories(db, since: datetime | None = None) -> None:
     watermark = since or _get_watermark(db, "cluster")
     config = _load_config(db)
 
-    new_items = db.fetch_all("SELECT * FROM silver.items WHERE inserted_at > %s", (watermark,))
-    open_stories = db.fetch_all("SELECT * FROM gold.story_clusters WHERE status = 'open'")
+    new_items = db.fetch_all(
+        "SELECT * FROM silver.items WHERE inserted_at > %s", (watermark,)
+    )
+    open_stories = db.fetch_all(
+        "SELECT * FROM gold.story_clusters WHERE status = 'open'"
+    )
 
     for item in new_items:
         match = _find_matching_story(item, open_stories, config)
@@ -148,7 +179,12 @@ def cluster_stories(db, since: datetime | None = None) -> None:
             db.execute(
                 """INSERT INTO gold.story_clusters (status, first_seen_at, last_item_at, representative_embedding, entity_set)
                    VALUES ('open', %s, %s, %s, %s)""",
-                (item["published_at"], item["published_at"], item["embedding"], item["key_entities"]),
+                (
+                    item["published_at"],
+                    item["published_at"],
+                    item["embedding"],
+                    item["key_entities"],
+                ),
             )
 
     close_after_days = int(config["story_close_after_days"])
@@ -159,7 +195,7 @@ def cluster_stories(db, since: datetime | None = None) -> None:
     )
 
     if not is_replay:
-        _advance_watermark(db, "cluster", datetime.now(timezone.utc))
+        _advance_watermark(db, "cluster", datetime.now(UTC))
 
 
 @task(retries=1)
@@ -171,7 +207,9 @@ def discover_topics(db, llm: LLMClient, window_days: int = 90) -> None:
     the quarterly one — same task, two schedules, no code duplication.
     """
     config = _load_config(db)
-    active_topics = db.fetch_all("SELECT id, canonical_name FROM gold.topic_registry WHERE status = 'active'")
+    active_topics = db.fetch_all(
+        "SELECT id, canonical_name FROM gold.topic_registry WHERE status = 'active'"
+    )
     stories = db.fetch_all(
         "SELECT * FROM gold.story_clusters WHERE last_item_at > now() - make_interval(days => %s)",
         (window_days,),
@@ -181,6 +219,7 @@ def discover_topics(db, llm: LLMClient, window_days: int = 90) -> None:
 
 # --- helpers below are algorithm stubs; see technical design §10 for the spec ---
 
+
 def _to_canonical_draft(raw): ...
 def _simhash(title: str) -> int: ...
 def _enrichment_prompt(draft) -> str: ...
@@ -188,4 +227,6 @@ def _find_matching_story(item, open_stories, config): ...
 def _load_config(db) -> dict[str, str]:
     rows = db.fetch_all("SELECT key, value FROM gold.pipeline_config")
     return {r["key"]: r["value"] for r in rows}
+
+
 def _run_bertopic_and_upsert(db, llm, active_topics, stories, config): ...

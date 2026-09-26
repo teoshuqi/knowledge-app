@@ -1,6 +1,7 @@
 """Single source of truth for data shapes. Every module below imports from here
 rather than redefining a field list — one change, one place.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -36,6 +37,7 @@ class RawItem(BaseModel):
 
 class CanonicalDraft(BaseModel):
     """What a Connector hands the processing pipeline — before enrichment/embedding."""
+
     source_id: str
     external_id: str
     canonical_url: str
@@ -49,9 +51,10 @@ class CanonicalDraft(BaseModel):
 
 class Enrichment(BaseModel):
     """The one structured LLM call's validated output. See LLMClient."""
+
     summary: str
     key_entities: list[KeyEntity]
-    topics: list[str]           # candidate topic names, resolved against the registry downstream
+    topics: list[str]  # candidate topic names, resolved against the registry downstream
 
 
 class SilverItem(BaseModel):

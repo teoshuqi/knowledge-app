@@ -1,4 +1,5 @@
 """Smoke test for Settings (F-04, LLD §2.1)."""
+
 from src.config import get_settings
 
 

@@ -2,6 +2,7 @@
 Interface stays exactly two methods — adding a source is a new subclass,
 never a change here or in the pipeline that calls it.
 """
+
 from abc import ABC, abstractmethod
 
 from src.models import CanonicalDraft, RawItem

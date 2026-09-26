@@ -7,3 +7,8 @@ venv/
 *.egg-info/
 dbt/target/
 dbt/logs/
+.pytype/
+.ci-artifacts/
+.mypy_cache/
+.ruff_cache/
+.coverage

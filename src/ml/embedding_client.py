@@ -7,6 +7,7 @@ used only when a specific fine-tuned HF model isn't in fastembed's curated list
 and isn't worth an ONNX export. Selected once via config, not branched at
 every call site.
 """
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -19,6 +20,7 @@ class EmbeddingClient(Protocol):
 class FastEmbedClient:
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
         from fastembed import TextEmbedding
+
         self._model = TextEmbedding(model_name=model_name)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -28,6 +30,7 @@ class FastEmbedClient:
 class SentenceTransformerClient:
     def __init__(self, model_name: str):
         from sentence_transformers import SentenceTransformer
+
         self._model = SentenceTransformer(model_name)
 
     def embed(self, texts: list[str]) -> list[list[float]]:

@@ -4,6 +4,7 @@ Protocol, not ABC: a test fake just needs to match this shape, no inheritance
 ceremony. Two real implementers (Postgres in production, an in-memory fake in
 tests) is what justifies the seam existing at all.
 """
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -53,6 +54,7 @@ class DigestBuilder:
     design §3.7. No scoring logic belongs here; if a card ever needs a new
     ranking rule, that rule is a dbt model change, not an edit to this class.
     """
+
     def __init__(self, repo: GoldRepository):
         self._repo = repo
 

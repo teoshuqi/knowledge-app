@@ -3,6 +3,7 @@ read from (F-04, LLD §2.1). Fields nothing reads yet stay Optional rather than
 forcing a value now; the consuming module raises its own clear error once it
 actually needs one.
 """
+
 from functools import lru_cache
 
 from pydantic import Field

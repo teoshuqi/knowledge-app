@@ -13,6 +13,7 @@ llama-server service, added in H-03) and LLAMA_SERVER_URL set.
 
 Run: python scripts/benchmark_llama_server.py
 """
+
 import statistics
 import sys
 import time
@@ -26,9 +27,12 @@ from src.config import get_settings
 SAMPLE_PROMPT = (
     "Extract a summary, key entities, and topic tags from this content.\n\n"
     "TITLE: vLLM adds native support for speculative decoding\n"
-    "TEXT: " + ("Speculative decoding reduces inference latency by drafting "
-                "multiple tokens with a small model and verifying them in a "
-                "single pass with the larger target model. " * 40)
+    "TEXT: "
+    + (
+        "Speculative decoding reduces inference latency by drafting "
+        "multiple tokens with a small model and verifying them in a "
+        "single pass with the larger target model. " * 40
+    )
 )
 N_RUNS = 10
 PER_ITEM_SLA_SECONDS = 5.0

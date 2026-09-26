@@ -11,6 +11,7 @@ once per candidate model to decide EMBEDDING_MODEL, then move on.
 
 Run: python scripts/validate_embedding_model.py
 """
+
 from dataclasses import dataclass
 
 from fastembed import TextEmbedding
@@ -179,8 +180,10 @@ def main() -> None:
     best = max(results, key=lambda r: r["margin"])
     print(f"\nBest separation: {best['model']} (margin={best['margin']:+.3f})")
     if best["margin"] <= 0:
-        print("VERDICT: no candidate cleanly separates matches from non-matches on this "
-              "sample — do not default to either yet; expand PAIRS or reconsider the model list.")
+        print(
+            "VERDICT: no candidate cleanly separates matches from non-matches on this "
+            "sample — do not default to either yet; expand PAIRS or reconsider the model list."
+        )
     else:
         print(f"VERDICT: set EMBEDDING_MODEL={best['model']} as the default.")
 

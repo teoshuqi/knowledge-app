@@ -8,6 +8,7 @@ tool spec, validating the response against it, and retrying once on a
 malformed reply before flagging — every call site (enrichment, BERTopic's
 topic-naming step) would otherwise duplicate that loop.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,8 +52,12 @@ class LLMClient:
                 return schema.model_validate_json(raw)
             except (ValidationError, IndexError, AttributeError) as e:
                 last_error = e
-                logger.warning("LLM structured output invalid (attempt %d): %s", attempt, e)
-        raise ExtractionFailed(f"{schema.__name__} extraction failed after retry: {last_error}")
+                logger.warning(
+                    "LLM structured output invalid (attempt %d): %s", attempt, e
+                )
+        raise ExtractionFailed(
+            f"{schema.__name__} extraction failed after retry: {last_error}"
+        )
 
 
 def _schema_to_tool(schema: type[BaseModel]) -> dict:

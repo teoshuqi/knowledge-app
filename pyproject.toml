@@ -15,7 +15,18 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",
     "mypy>=1.10",
+    "pytype>=2024.10.11",
+    "black>=24",
+    "ruff>=0.6",
+    "bandit>=1.7",
+    "pylint>=3",     # pyreverse ships inside pylint, not a standalone package
+    "radon>=6",
+    "xenon>=0.9",    # radon's own CI-gating wrapper — pass/fail thresholds radon itself doesn't have
+    "interrogate>=1.5",
+    "vulture>=2.11",
+    "pip-audit>=2.7",
 ]
 
 [tool.pytest.ini_options]
@@ -25,6 +36,26 @@ testpaths = ["tests"]
 plugins = ["pydantic.mypy"]
 explicit_package_bases = true
 ignore_missing_imports = true
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+# B101 (assert_used): this codebase's own convention is assert-based
+# self-checks in one-off scripts and gates (ponytail style) — not a
+# security concern here, so it'd be pure noise every time.
+skips = ["B101"]
+
+[tool.interrogate]
+# Ponytail style deliberately keeps docstrings sparse — only where the WHY
+# isn't obvious from the code (see CLAUDE-level convention, not repeated
+# here). This check is informational (see scripts/ci_check.sh), not a gate:
+# fail-under is kept low so it reports the number without blocking CI.
+fail-under = 0
+exclude = [".venv", ".pytype", "dbt"]
+ignore-init-module = true
+ignore-magic = true
 
 [build-system]
 requires = ["setuptools>=68"]

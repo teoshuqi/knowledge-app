@@ -2,6 +2,7 @@
 topic tags. See §2.4/§10.1 for the rationale; this module is the prompt and
 the call, kept separate from tasks.py's orchestration.
 """
+
 from src.ml.llm_client import LLMClient
 from src.models import CanonicalDraft, Enrichment
 
@@ -39,10 +40,14 @@ def build_prompt(draft: CanonicalDraft, existing_topics: list[str]) -> str:
     # the list is actually big enough to need it.
     return _PROMPT.format(
         title=draft.title,
-        text=draft.cleaned_text[:4000],  # bound input; full text rarely adds signal past this
+        text=draft.cleaned_text[
+            :4000
+        ],  # bound input; full text rarely adds signal past this
         existing_topics=", ".join(existing_topics) or "(none yet)",
     )
 
 
-def enrich(llm: LLMClient, draft: CanonicalDraft, existing_topics: list[str]) -> Enrichment:
+def enrich(
+    llm: LLMClient, draft: CanonicalDraft, existing_topics: list[str]
+) -> Enrichment:
     return llm.extract(build_prompt(draft, existing_topics), Enrichment)

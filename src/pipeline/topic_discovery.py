@@ -8,6 +8,7 @@ BaseRepresentation subclassing, get_representative_docs) — verify parameter
 names against the installed version's docs before implementing; this is the
 one module in this pass I can't fully vouch for at the API-signature level.
 """
+
 from bertopic import BERTopic
 from bertopic.representation import BaseRepresentation
 from pydantic import BaseModel
@@ -17,13 +18,16 @@ from src.ml.llm_client import LLMClient
 
 class _TopicName(BaseModel):
     name: str
-    is_duplicate_of_existing: str | None  # an existing name, if this really is that topic
+    is_duplicate_of_existing: (
+        str | None
+    )  # an existing name, if this really is that topic
 
 
 class LLMTopicNamer(BaseRepresentation):
     """Plugs the existing LLMClient into BERTopic's representation-model slot —
     topic naming is provider-flexible the same way enrichment is (§2.4).
     """
+
     def __init__(self, llm: LLMClient, active_topic_names: list[str]):
         self._llm = llm
         self._active_names = active_topic_names
@@ -31,7 +35,7 @@ class LLMTopicNamer(BaseRepresentation):
     def extract_topics(self, topic_model, documents, c_tf_idf, topics):
         updated = {}
         for topic_id in topics:
-            if topic_id == -1:          # BERTopic's noise label — never name noise
+            if topic_id == -1:  # BERTopic's noise label — never name noise
                 continue
             sample = "\n".join(topic_model.get_representative_docs(topic_id)[:5])
             prompt = (
@@ -44,7 +48,9 @@ class LLMTopicNamer(BaseRepresentation):
         return updated
 
 
-def run_discovery(llm: LLMClient, active_topics: list[dict], stories: list[dict], config: dict) -> list[dict]:
+def run_discovery(
+    llm: LLMClient, active_topics: list[dict], stories: list[dict], config: dict
+) -> list[dict]:
     """Returns [{story_id, topic_name, is_new}, ...]. Deciding the grouping is
     this function's only job — tasks.py owns the topic_registry/
     story_topics_discovered upsert.
@@ -71,9 +77,11 @@ def run_discovery(llm: LLMClient, active_topics: list[dict], stories: list[dict]
         if topic_id == -1:
             continue  # genuinely nothing to propose — not every story needs a topic
         name = topic_info.loc[topic_info["Topic"] == topic_id, "Name"].iloc[0]
-        results.append({
-            "story_id": story["id"],
-            "topic_name": name,
-            "is_new": name not in active_names,
-        })
+        results.append(
+            {
+                "story_id": story["id"],
+                "topic_name": name,
+                "is_new": name not in active_names,
+            }
+        )
     return results

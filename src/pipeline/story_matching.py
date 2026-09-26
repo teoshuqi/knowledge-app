@@ -6,11 +6,17 @@ a quiet under-count, a false merge actively misinforms the trending signal.
 # Retune against the labeled story-pair eval set (§10.4/§2.11 of the LLD scope)
 # once ~30-50 labeled pairs exist — don't hand-tune further before that data does.
 """
+
 import math
 
 _ENTITY_TYPE_WEIGHT = {
-    "model": 3.0, "paper": 3.0, "dataset": 2.5, "benchmark": 2.5,
-    "tool": 1.5, "company": 1.0, "person": 1.0,
+    "model": 3.0,
+    "paper": 3.0,
+    "dataset": 2.5,
+    "benchmark": 2.5,
+    "tool": 1.5,
+    "company": 1.0,
+    "person": 1.0,
 }
 _SPECIFIC_TYPES = {"model", "paper", "dataset", "benchmark"}
 
@@ -26,7 +32,9 @@ def weighted_entity_overlap(a: list[dict], b: list[dict]) -> float:
     if not shared:
         return 0.0
     weight = sum(_ENTITY_TYPE_WEIGHT.get(a_norm[k], 1.0) for k in shared)
-    total = sum(_ENTITY_TYPE_WEIGHT.get(t, 1.0) for t in [*a_norm.values(), *b_norm.values()])
+    total = sum(
+        _ENTITY_TYPE_WEIGHT.get(t, 1.0) for t in [*a_norm.values(), *b_norm.values()]
+    )
     return weight / total if total else 0.0
 
 
@@ -43,7 +51,9 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
 
 
-def find_matching_story(item: dict, open_stories: list[dict], config: dict) -> dict | None:
+def find_matching_story(
+    item: dict, open_stories: list[dict], config: dict
+) -> dict | None:
     entity_threshold = 0.3
     embed_threshold = float(config["story_match_embedding_threshold"])
     relaxed_threshold = float(config["story_match_embedding_threshold_relaxed"])
@@ -51,7 +61,9 @@ def find_matching_story(item: dict, open_stories: list[dict], config: dict) -> d
     best_match, best_score = None, 0.0
     for story in open_stories:
         overlap = weighted_entity_overlap(item["key_entities"], story["entity_set"])
-        embed_sim = cosine_similarity(item["embedding"], story["representative_embedding"])
+        embed_sim = cosine_similarity(
+            item["embedding"], story["representative_embedding"]
+        )
 
         matches = (overlap >= entity_threshold and embed_sim >= embed_threshold) or (
             has_exact_specific_entity_match(item["key_entities"], story["entity_set"])
@@ -62,10 +74,15 @@ def find_matching_story(item: dict, open_stories: list[dict], config: dict) -> d
     return best_match
 
 
-def update_centroid(old_centroid: list[float], member_count: int, new_embedding: list[float]) -> list[float]:
+def update_centroid(
+    old_centroid: list[float], member_count: int, new_embedding: list[float]
+) -> list[float]:
     """Running mean — O(1) per attach, no need to re-average all members."""
     n = member_count
-    return [(c * (n / (n + 1))) + (e * (1 / (n + 1))) for c, e in zip(old_centroid, new_embedding)]
+    return [
+        (c * (n / (n + 1))) + (e * (1 / (n + 1)))
+        for c, e in zip(old_centroid, new_embedding)
+    ]
 
 
 def merge_entity_sets(existing: list[dict], new: list[dict]) -> list[dict]:
