@@ -1,0 +1,50 @@
+# Phase 0 skeleton (F-03): postgres + prefect-server + prefect-worker only.
+# bot, dashboard, and the optional llama-server are added in H-03 once those
+# tracks exist (tech design §2.7/§2.8) — no Kubernetes, single host throughout.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: knowledge
+      POSTGRES_PASSWORD: knowledge
+      POSTGRES_DB: knowledge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U knowledge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  prefect-worker:
+    build: .
+    command: prefect worker start --pool default-pool
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prefect-server:
+        condition: service_healthy
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      POSTGRES_DSN: postgresql://knowledge:knowledge@postgres:5432/knowledge
+    env_file:
+      - .env
+
+volumes:
+  pgdata:
