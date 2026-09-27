@@ -19,6 +19,10 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
+    "pytest-asyncio>=0.24",         # Phase 1 tests: async test support
+    "responses>=0.24",              # Phase 1 tests: mock httpx/requests
+    "freezegun>=1.5",               # Phase 1 tests: mock datetime
+    "testcontainers>=4.0",          # Phase 1 tests: Docker containers for integration tests
     "mypy>=1.10",
     "pytype>=2024.10.11",
     "black>=24",
@@ -35,6 +39,9 @@ dev = [
     "shfmt-py>=4.2",        # same, for the shfmt binary
     "sqlfluff>=4.3",
     "yamllint>=1.35",
+    "pydeps>=1.11",                 # dependency graph visualization (imports)
+    "dot-layered-transform>=1.0",   # architecture analysis (circular deps, layer violations)
+    "skylos>=2.0",                  # comprehensive quality scanning (secrets, dead code, quality)
 ]
 
 [tool.pytest.ini_options]
@@ -84,3 +91,18 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.pydeps]
+# pydeps configuration for dependency visualization
+exclude = ["tests", ".venv"]
+max-bacon = 2  # limit to 2 hops (direct imports only)
+rankdir = "TB"  # top-to-bottom layout
+
+[tool.skylos]
+# skylos configuration for comprehensive code quality scanning
+exclude = ["tests", ".venv", "docs", "__pycache__"]
+# Enable all audit categories
+quality = true
+secrets = true
+dead_code = true
+sca = true  # Software Composition Analysis (dependency vulnerabilities)

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <channel>
+    <title>arXiv.org cs.CL (Computation and Language)</title>
+    <link>https://arxiv.org/list/cs.CL/recent</link>
+    <description>Recent papers in Computation and Language</description>
+    <item>
+      <title>Attention Is All You Need for LLMs</title>
+      <link>https://arxiv.org/abs/2026.12345</link>
+      <pubDate>Fri, 25 Sep 2026 20:00:00 GMT</pubDate>
+      <description>An analysis of attention mechanisms in large language models</description>
+      <guid>arxiv-001</guid>
+    </item>
+    <item>
+      <title>Efficient Transformers: A Survey</title>
+      <link>https://arxiv.org/abs/2026.12346</link>
+      <pubDate>Thu, 24 Sep 2026 18:00:00 GMT</pubDate>
+      <description>Survey of efficient transformer architectures</description>
+      <guid>arxiv-002</guid>
+    </item>
+  </channel>
+</rss>

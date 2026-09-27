@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>r/MachineLearning</title>
+    <link>https://www.reddit.com/r/MachineLearning/</link>
+    <description>Machine Learning community discussions</description>
+    <item>
+      <title>New SOTA on ImageNet Classification</title>
+      <link>https://www.reddit.com/r/MachineLearning/comments/abc123/</link>
+      <pubDate>Sat, 27 Sep 2026 14:00:00 GMT</pubDate>
+      <description>A new state-of-the-art model for image classification</description>
+      <content:encoded><![CDATA[<p>Researchers achieved 98.5% accuracy on ImageNet.</p>]]></content:encoded>
+      <guid isPermaLink="false">reddit-r-MachineLearning-001</guid>
+    </item>
+    <item>
+      <title>Running LLMs Locally on Raspberry Pi</title>
+      <link>https://www.reddit.com/r/MachineLearning/comments/def456/</link>
+      <pubDate>Fri, 26 Sep 2026 12:00:00 GMT</pubDate>
+      <description>Guide to running language models on edge devices</description>
+      <guid isPermaLink="false">reddit-r-MachineLearning-002</guid>
+    </item>
+  </channel>
+</rss>

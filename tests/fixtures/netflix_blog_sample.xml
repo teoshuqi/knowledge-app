@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Netflix Tech Blog</title>
+    <link>https://netflixtechblog.com</link>
+    <description>Netflix Technology Blog</description>
+    <item>
+      <title>Machine Learning at Scale</title>
+      <link>https://netflixtechblog.com/ml-at-scale-2026</link>
+      <pubDate>Mon, 27 Sep 2026 10:00:00 GMT</pubDate>
+      <description>How Netflix scales machine learning for recommendations</description>
+      <content:encoded><![CDATA[
+        <p>Netflix uses advanced ML techniques for personalization.</p>
+        <p>This is a comprehensive article about machine learning at Netflix scale.</p>
+      ]]></content:encoded>
+      <guid>netflix-001</guid>
+    </item>
+    <item>
+      <title>Building Resilient Systems</title>
+      <link>https://netflixtechblog.com/resilience-2026</link>
+      <pubDate>Sun, 26 Sep 2026 15:30:00 GMT</pubDate>
+      <description>Resilience patterns in distributed systems</description>
+      <guid>netflix-002</guid>
+    </item>
+  </channel>
+</rss>
