@@ -13,6 +13,10 @@ class Connector(ABC):
     source_id: str
     source_type: str
 
+    def __init__(self, source_id: str) -> None:
+        """Initialize connector with source ID. Subclasses may add more config."""
+        self.source_id = source_id
+
     @abstractmethod
     def fetch(self, since: datetime | None = None) -> list[RawItem]:
         """Fetch items newer than `since` (datetime object). None = use watermark

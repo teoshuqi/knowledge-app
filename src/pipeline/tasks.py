@@ -16,10 +16,11 @@ any single one be re-triggered alone.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from prefect import get_run_logger, task
 
-from src.connectors.base import Connector
+from src.connectors import ConnectorRegistry
 from src.ml.embedding_client import EmbeddingClient
 from src.ml.llm_client import ExtractionFailed, LLMClient
 from src.models import Enrichment
@@ -46,32 +47,48 @@ def _advance_watermark(db, task_name: str, up_to: datetime) -> None:
 
 
 @task(retries=3, retry_delay_seconds=60)
-def fetch_source(db, connector: Connector, since: datetime | None = None) -> None:
+def fetch_source(db: Any, source_id: str, since: datetime | None = None) -> None:
+    """Fetch items from a single source. Upsert into bronze.raw_items with
+    watermark tracking. since=None reads watermark; explicit since is a replay.
+    """
     logger = get_run_logger()
     is_replay = since is not None
-    watermark = since or _get_watermark(db, f"fetch:{connector.source_id}")
+    watermark = since or _get_watermark(db, f"fetch:{source_id}")
 
-    items = connector.fetch(since=watermark.isoformat())
+    connector = ConnectorRegistry.get(source_id)
+    items = connector.fetch(since=watermark)
+
+    inserted = 0
+    deduped = 0
     for raw in items:
-        db.execute(
-            """INSERT INTO bronze.raw_items (source_id, source_type, fetched_at, external_id, raw_payload, fetch_status)
-               VALUES (%s, %s, %s, %s, %s, 'ok')
-               ON CONFLICT (source_id, external_id) DO NOTHING""",
-            (
-                raw.source_id,
-                raw.source_type,
-                raw.fetched_at,
-                raw.external_id,
-                raw.raw_payload,
-            ),
-        )
+        try:
+            db.execute(
+                """INSERT INTO bronze.raw_items
+                   (source_id, source_type, fetched_at, external_id, raw_payload, fetch_status)
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (source_id, external_id) DO NOTHING""",
+                (
+                    raw.source_id,
+                    raw.source_type,
+                    raw.fetched_at,
+                    raw.external_id,
+                    raw.raw_payload,
+                    raw.fetch_status,
+                ),
+            )
+            inserted += 1
+        except OSError:
+            logger.exception("Failed to insert raw item from %s", source_id)
 
     if not is_replay:
-        _advance_watermark(db, f"fetch:{connector.source_id}", datetime.now(UTC))
+        _advance_watermark(db, f"fetch:{source_id}", datetime.now(UTC))
+
     logger.info(
-        "fetch_source(%s): %d items, replay=%s",
-        connector.source_id,
+        "fetch_source(%s): %d items fetched, inserted=%d, deduped=%d, replay=%s",
+        source_id,
         len(items),
+        inserted,
+        deduped,
         is_replay,
     )
 
