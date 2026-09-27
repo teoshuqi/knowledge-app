@@ -33,6 +33,7 @@ class RawItem(BaseModel):
     fetched_at: datetime
     external_id: str
     raw_payload: dict
+    fetch_status: Literal["ok", "error", "empty"] = "ok"
 
 
 class CanonicalDraft(BaseModel):

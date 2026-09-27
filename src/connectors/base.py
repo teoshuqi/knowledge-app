@@ -4,6 +4,7 @@ never a change here or in the pipeline that calls it.
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from src.models import CanonicalDraft, RawItem
 
@@ -13,20 +14,18 @@ class Connector(ABC):
     source_type: str
 
     @abstractmethod
-    def fetch(self, since: str | None = None) -> list[RawItem]:
-        """Fetch items newer than `since` (ISO timestamp). None = since this
-        connector's own last successful fetch, tracked by the caller via
-        pipeline_watermarks — this method never needs a human to pass a date.
-        Must be idempotent: re-fetching an already-seen external_id is safe
-        (bronze.raw_items enforces this with a UNIQUE constraint regardless).
+    def fetch(self, since: datetime | None = None) -> list[RawItem]:
+        """Fetch items newer than `since` (datetime object). None = use watermark
+        from pipeline_watermarks table (read by caller); explicit since is a
+        replay window and never advances the watermark. Must be idempotent:
+        re-fetching the same external_id is safe (bronze.raw_items enforces
+        UNIQUE(source_id, external_id) regardless).
         """
 
     @abstractmethod
     def to_canonical_draft(self, raw: RawItem) -> CanonicalDraft:
-        """This source's own raw→canonical conversion (e.g. github_trending
-        builds a repo-shaped draft with no trafilatura step; everything else
-        runs trafilatura). The processing pipeline calls this polymorphically
-        and never branches on source_type itself — that branching would be
-        the one thing that breaks §4.1's "adding a source touches nothing
-        else" requirement.
+        """Convert this source's raw item to canonical form. Each connector
+        implements its own extraction (e.g. GitHub Trending builds a repo-shaped
+        draft; RSS sources run trafilatura). Pipeline calls this polymorphically
+        per source_type — no source-type branching in the pipeline itself.
         """
