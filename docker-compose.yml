@@ -11,9 +11,13 @@ services:
       POSTGRES_PASSWORD: knowledge
       POSTGRES_DB: knowledge
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5433 to avoid clashing with other local postgres instances on 5432
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Postgres runs *.sql files here once, only on an empty data dir (first
+      # boot) — this is what applies schema + seeds, not the app itself.
+      - ./sql/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./sql/seeds/002_source_registry_phase1.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U knowledge"]
       interval: 5s

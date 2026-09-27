@@ -16,7 +16,7 @@ any single one be re-triggered alone.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from prefect import get_run_logger, task
 
@@ -25,10 +25,19 @@ from src.ml.embedding_client import EmbeddingClient
 from src.ml.llm_client import ExtractionFailed, LLMClient
 from src.models import Enrichment
 
+
+class DatabaseConnection(Protocol):
+    """Interface that all db objects must match. Implementers: Postgres adapter,
+    test fakes, replay tools."""
+
+    def fetch_one(self, sql: str, params: tuple = ()) -> dict | None: ...
+    def fetch_all(self, sql: str, params: tuple = ()) -> list[dict]: ...
+    def execute(self, sql: str, params: tuple = ()) -> None: ...
+
 _WATERMARK_TASKS = ("fetch", "process", "cluster")
 
 
-def _get_watermark(db, task_name: str) -> datetime:
+def _get_watermark(db: DatabaseConnection, task_name: str) -> datetime:
     row = db.fetch_one(
         "SELECT last_processed_at FROM gold.pipeline_watermarks WHERE task_name = %s",
         (task_name,),
@@ -36,18 +45,17 @@ def _get_watermark(db, task_name: str) -> datetime:
     return row["last_processed_at"] if row else datetime(1970, 1, 1, tzinfo=UTC)
 
 
-def _advance_watermark(db, task_name: str, up_to: datetime) -> None:
+def _advance_watermark(db: DatabaseConnection, task_name: str, up_to: datetime) -> None:
     db.execute(
         """INSERT INTO gold.pipeline_watermarks (task_name, last_processed_at)
            VALUES (%s, %s)
-           ON CONFLICT (task_name) DO UPDATE SET last_processed_at = EXCLUDED.last_processed_at,
-                                                  updated_at = now()""",
+           ON CONFLICT (task_name) DO UPDATE SET last_processed_at = EXCLUDED.last_processed_at""",
         (task_name, up_to),
     )
 
 
 @task(retries=3, retry_delay_seconds=60)
-def fetch_source(db: Any, source_id: str, since: datetime | None = None) -> None:
+def fetch_source(db: DatabaseConnection, source_id: str, since: datetime | None = None) -> None:
     """Fetch items from a single source. Upsert into bronze.raw_items with
     watermark tracking. since=None reads watermark; explicit since is a replay.
     """
@@ -59,43 +67,38 @@ def fetch_source(db: Any, source_id: str, since: datetime | None = None) -> None
     items = connector.fetch(since=watermark)
 
     inserted = 0
-    deduped = 0
     for raw in items:
-        try:
-            db.execute(
-                """INSERT INTO bronze.raw_items
-                   (source_id, source_type, fetched_at, external_id, raw_payload, fetch_status)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (source_id, external_id) DO NOTHING""",
-                (
-                    raw.source_id,
-                    raw.source_type,
-                    raw.fetched_at,
-                    raw.external_id,
-                    raw.raw_payload,
-                    raw.fetch_status,
-                ),
-            )
-            inserted += 1
-        except OSError:
-            logger.exception("Failed to insert raw item from %s", source_id)
+        db.execute(
+            """INSERT INTO bronze.raw_items
+               (source_id, source_type, fetched_at, external_id, raw_payload, fetch_status)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (source_id, external_id) DO NOTHING""",
+            (
+                raw.source_id,
+                raw.source_type,
+                raw.fetched_at,
+                raw.external_id,
+                raw.raw_payload,
+                raw.fetch_status,
+            ),
+        )
+        inserted += 1
 
     if not is_replay:
         _advance_watermark(db, f"fetch:{source_id}", datetime.now(UTC))
 
     logger.info(
-        "fetch_source(%s): %d items fetched, inserted=%d, deduped=%d, replay=%s",
+        "fetch_source(%s): %d items fetched, inserted=%d, replay=%s",
         source_id,
         len(items),
         inserted,
-        deduped,
         is_replay,
     )
 
 
 @task(retries=1)
 def process_batch(
-    db,
+    db: DatabaseConnection,
     llm: LLMClient,
     embedder: EmbeddingClient,
     since: datetime | None = None,
@@ -168,7 +171,7 @@ def process_batch(
 
 
 @task(retries=1)
-def cluster_stories(db, since: datetime | None = None) -> None:
+def cluster_stories(db: DatabaseConnection, since: datetime | None = None) -> None:
     """Matches new items against today's batch + currently open stories only
     (§3.3) — never against full history, so this stays cheap regardless of
     the configurable close window or how much history has accumulated.
@@ -204,7 +207,7 @@ def cluster_stories(db, since: datetime | None = None) -> None:
                 ),
             )
 
-    close_after_days = int(config["story_close_after_days"])
+    close_after_days = int(config.get("story_close_after_days", "7"))
     db.execute(
         """UPDATE gold.story_clusters SET status = 'closed'
            WHERE status = 'open' AND last_item_at < now() - make_interval(days => %s)""",
@@ -216,7 +219,7 @@ def cluster_stories(db, since: datetime | None = None) -> None:
 
 
 @task(retries=1)
-def discover_topics(db, llm: LLMClient, window_days: int = 90) -> None:
+def discover_topics(db: DatabaseConnection, llm: LLMClient, window_days: int = 90) -> None:
     """Always a fresh, stateless run over a trailing window from now — not a
     watermark task. Zero-shot-assigns against the *current* active registry
     first (BERTopic), then clusters only the residual. See §10.5 / §2.6.
@@ -234,16 +237,43 @@ def discover_topics(db, llm: LLMClient, window_days: int = 90) -> None:
     _run_bertopic_and_upsert(db, llm, active_topics, stories, config)
 
 
+def _to_canonical_draft(raw):
+    # Reconstruct a RawItem from the database row, then delegate to the
+    # connector's extraction method (per-source via registry). raw is a dict
+    # from bronze.raw_items, keyed by column name.
+    from src.models import RawItem
+
+    item = RawItem(
+        source_id=raw["source_id"],
+        source_type=raw["source_type"],
+        fetched_at=raw["fetched_at"],
+        external_id=raw["external_id"],
+        raw_payload=raw["raw_payload"],
+        fetch_status=raw["fetch_status"],
+    )
+    connector = ConnectorRegistry.get(raw["source_id"])
+    return connector.to_canonical_draft(item)
+
+
 # --- helpers below are algorithm stubs; see technical design §10 for the spec ---
 
 
-def _to_canonical_draft(raw): ...
-def _simhash(title: str) -> int: ...
-def _enrichment_prompt(draft) -> str: ...
-def _find_matching_story(item, open_stories, config): ...
-def _load_config(db) -> dict[str, str]:
+def _simhash(title: str) -> int:
+    raise NotImplementedError("_simhash: see technical design §10.3 for spec")
+
+
+def _enrichment_prompt(draft) -> str:
+    raise NotImplementedError("_enrichment_prompt: see LLD §2.2 for spec")
+
+
+def _find_matching_story(item, open_stories, config):
+    raise NotImplementedError("_find_matching_story: see LLD §2.4 for spec")
+
+
+def _load_config(db: DatabaseConnection) -> dict[str, str]:
     rows = db.fetch_all("SELECT key, value FROM gold.pipeline_config")
     return {r["key"]: r["value"] for r in rows}
 
 
-def _run_bertopic_and_upsert(db, llm, active_topics, stories, config): ...
+def _run_bertopic_and_upsert(db: DatabaseConnection, llm: LLMClient, active_topics, stories, config):
+    raise NotImplementedError("_run_bertopic_and_upsert: see LLD §2.5 for spec")
