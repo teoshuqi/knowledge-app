@@ -58,7 +58,8 @@ class RSSConnector(Connector):
 
             for entry in feed.entries:
                 try:
-                    dt = datetime(*entry.published_parsed[:6])  # noqa: DTZ001
+                    parsed = entry.get("published_parsed")
+                    dt = datetime(*parsed[:6])  # noqa: DTZ001
                     published = dt.replace(tzinfo=UTC)
                 except (AttributeError, TypeError, ValueError):
                     published = datetime.now(UTC)

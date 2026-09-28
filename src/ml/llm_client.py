@@ -30,13 +30,16 @@ class ExtractionFailed(Exception):
 
 
 class LLMClient:
-    def __init__(self, model: str, max_retries: int = 1):
+    def __init__(self, model: str, api_base: str | None = None, max_retries: int = 1):
         # `model` is a litellm model string: "claude-haiku-4-5-20251001" for
-        # the API, or "openai/<name>" with api_base pointed at a local
-        # llama-server for the self-hosted path. That's the whole provider
+        # the Anthropic API, or an OpenAI-compatible model name (e.g. "openai/gemma-4-e2b")
+        # when `api_base` points to a local llama-server. That's the whole provider
         # switch — a config value, not a code path.
         self.model = model
+        self.api_base = api_base
         self.max_retries = max_retries
+        if api_base:
+            litellm.api_base = api_base
 
     def extract(self, prompt: str, schema: type[T]) -> T:
         last_error: Exception | None = None

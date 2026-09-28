@@ -1,11 +1,11 @@
-"""Tests for PostgreSQL schema integrity (optional, requires Docker)."""
+"""Tests for PostgreSQL schema integrity (requires Docker; skips automatically
+when testcontainers or Docker itself is unavailable - see conftest.py's
+postgres_container fixture).
+"""
 
 from __future__ import annotations
 
-import pytest
 
-
-@pytest.mark.skip(reason="Requires testcontainers and Docker; run with --docker flag")
 class TestBronzeTablesExist:
     """Tests for bronze layer table structure."""
 
@@ -23,7 +23,7 @@ class TestBronzeTablesExist:
         columns = {row[0]: row[1] for row in cursor.fetchall()}
 
         required_columns = {
-            "id": "bigint",
+            "id": "uuid",
             "source_id": "text",
             "external_id": "text",
             "source_type": "text",
@@ -77,7 +77,6 @@ class TestBronzeTablesExist:
         assert count > 0
 
 
-@pytest.mark.skip(reason="Requires testcontainers and Docker; run with --docker flag")
 class TestSilverTablesExist:
     """Tests for silver layer table structure."""
 
@@ -130,7 +129,6 @@ class TestSilverTablesExist:
         assert len(unique_constraints) > 0
 
 
-@pytest.mark.skip(reason="Requires testcontainers and Docker; run with --docker flag")
 class TestGoldTablesExist:
     """Tests for gold layer table structure."""
 
@@ -146,7 +144,10 @@ class TestGoldTablesExist:
         )
         columns = [row[0] for row in cursor.fetchall()]
 
-        required = ["task_name", "last_processed_at", "updated_at"]
+        # last_processed_at is rewritten on every upsert (ON CONFLICT DO
+        # UPDATE), so it already doubles as "last touched" - no separate
+        # updated_at column exists or is needed.
+        required = ["task_name", "last_processed_at"]
         for col in required:
             assert col in columns
 
@@ -183,7 +184,6 @@ class TestGoldTablesExist:
             assert col in columns
 
 
-@pytest.mark.skip(reason="Requires testcontainers and Docker; run with --docker flag")
 class TestOnConflictConstraints:
     """Tests for ON CONFLICT DO NOTHING idempotency."""
 
@@ -202,7 +202,10 @@ class TestOnConflictConstraints:
         )
         db_with_schema.commit()
 
-        cursor.execute("SELECT COUNT(*) FROM bronze.raw_items WHERE external_id = 'ext-001'")
+        cursor.execute(
+            "SELECT COUNT(*) FROM bronze.raw_items "
+            "WHERE source_id = 'netflix_blog' AND external_id = 'ext-001'"
+        )
         count_after_first = cursor.fetchone()[0]
 
         # Second insert (duplicate)
@@ -216,7 +219,10 @@ class TestOnConflictConstraints:
         )
         db_with_schema.commit()
 
-        cursor.execute("SELECT COUNT(*) FROM bronze.raw_items WHERE external_id = 'ext-001'")
+        cursor.execute(
+            "SELECT COUNT(*) FROM bronze.raw_items "
+            "WHERE source_id = 'netflix_blog' AND external_id = 'ext-001'"
+        )
         count_after_second = cursor.fetchone()[0]
 
         # Should still be 1 (duplicate was ignored)

@@ -65,7 +65,8 @@ class RedditConnector(Connector):
 
             for entry in feed.entries:
                 try:
-                    published = datetime(*entry.published_parsed[:6])  # noqa: DTZ001
+                    parsed = entry.get("published_parsed")
+                    published = datetime(*parsed[:6])  # noqa: DTZ001
                     published = published.replace(tzinfo=UTC)
                 except (AttributeError, TypeError, ValueError):
                     published = datetime.now(UTC)

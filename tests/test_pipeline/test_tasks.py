@@ -133,24 +133,28 @@ class TestFetchSourceTask:
             mock_registry.get.assert_called_once_with("netflix_blog")
 
     def test_fetch_source_handles_connector_fetch_error(self, mock_db):
-        """fetch_source should handle connector.fetch() raising exceptions."""
+        """fetch_source retries (retries=3, retry_delay_seconds=60) then
+        propagates the failure - connectors already catch their own known
+        failure modes internally (returning an error-status RawItem), so an
+        exception escaping fetch() is unexpected and retry-then-fail is the
+        correct response, not something fetch_source should swallow.
+        """
         with patch("src.pipeline.tasks._get_watermark"), patch(
             "src.pipeline.tasks._advance_watermark"
         ), patch("src.pipeline.tasks.ConnectorRegistry") as mock_registry, patch(
             "src.pipeline.tasks.get_run_logger"
-        ) as mock_logger_factory:
-            mock_logger = MagicMock()
-            mock_logger_factory.return_value = mock_logger
-
+        ):
             mock_connector = MagicMock()
             mock_connector.fetch.side_effect = Exception("Network timeout")
             mock_registry.get.return_value = mock_connector
 
-            # Should not raise, just log and continue
-            try:
-                fetch_source(mock_db, "netflix_blog", since=None)
-            except Exception:
-                pytest.fail("fetch_source should not raise on connector error")
+            # retry_delay_seconds=0 keeps the real retries=3 but skips the
+            # real 60s-per-attempt wait - patching time.sleep globally would
+            # also break Prefect's own ephemeral-server startup polling.
+            with pytest.raises(Exception, match="Network timeout"):
+                fetch_source.with_options(retry_delay_seconds=0)(
+                    mock_db, "netflix_blog", since=None
+                )
 
     def test_fetch_source_returns_none(self, mock_db):
         """fetch_source task should return None (fire-and-forget)."""

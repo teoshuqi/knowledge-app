@@ -40,3 +40,18 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def create_llm_client() -> "LLMClient":  # noqa: F821
+    """Factory for LLMClient routed via config: Anthropic API or local llama-server.
+    Caller imports this, never instantiates LLMClient directly.
+    """
+    from src.ml.llm_client import LLMClient
+
+    settings = get_settings()
+
+    # If llama_server_url is set, route to local; otherwise use Anthropic API
+    if settings.llama_server_url:
+        return LLMClient(model=settings.llm_model, api_base=settings.llama_server_url)
+    else:
+        return LLMClient(model=settings.llm_model)

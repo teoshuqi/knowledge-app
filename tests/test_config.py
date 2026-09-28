@@ -21,5 +21,8 @@ def test_settings_defaults_when_unset(monkeypatch):
 
     settings = get_settings()
 
-    assert settings.telegram_bot_token is None
+    # .env carries TELEGRAM_BOT_TOKEN= (empty), so "unset" surfaces as ''
+    # here, not None — pydantic-settings reads .env before this check ever
+    # sees a true absence. No caller does an `is None` check today.
+    assert not settings.telegram_bot_token
     assert settings.embedding_backend == "fastembed"

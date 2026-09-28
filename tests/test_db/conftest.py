@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 
@@ -12,17 +10,31 @@ def postgres_container():
     """Start a PostgreSQL container for testing (testcontainers)."""
     # Import here to avoid hard dependency if not in CI
     try:
-        from testcontainers.postgres import PostgresContainer
+        from testcontainers.community.postgres import PostgresContainer
     except ImportError:
         pytest.skip("testcontainers not installed")
 
-    container = PostgresContainer("postgres:16").with_bind_ports(5432, 5432)
+    # No fixed host port: testcontainers assigns a free one and
+    # get_connection_url() below returns it - a hardcoded 5432 conflicts
+    # with any other local Postgres already using that port.
+    container = PostgresContainer("postgres:16")
 
     # Start container
     container.start()
 
-    # Get connection string
-    dsn = container.get_connection_url()
+    # driver=None: plain postgresql:// URL. The default includes a
+    # SQLAlchemy-style "+psycopg2" driver suffix that psycopg3's connect()
+    # (used everywhere else in this codebase) can't parse.
+    dsn = container.get_connection_url(driver=None)
+
+    # Apply the schema once here, not per-test: db_with_schema is
+    # function-scoped but this container is session-scoped, and
+    # CREATE TABLE isn't idempotent - re-running it per test against the
+    # same container raises DuplicateTable on the second test.
+    import psycopg
+
+    with psycopg.connect(dsn) as conn, open("sql/migrations/001_initial_schema.sql") as f:
+        conn.execute(f.read())
 
     yield dsn
 
@@ -32,23 +44,9 @@ def postgres_container():
 
 @pytest.fixture
 def db_with_schema(postgres_container):
-    """Create database connection and run schema migrations."""
+    """Connection to the schema-loaded test database (see postgres_container)."""
     import psycopg
 
-    dsn = postgres_container
-
-    # Connect and create tables
-    conn = psycopg.connect(dsn)
-    cursor = conn.cursor()
-
-    # Read and execute schema from sql/schema.sql
-    schema_path = "sql/schema.sql"
-    if os.path.exists(schema_path):
-        with open(schema_path) as f:
-            cursor.execute(f.read())
-    conn.commit()
-
+    conn = psycopg.connect(postgres_container)
     yield conn
-
-    # Cleanup
     conn.close()

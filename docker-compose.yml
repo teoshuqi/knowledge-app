@@ -1,7 +1,12 @@
 ---
-# Phase 0 skeleton (F-03): postgres + prefect-server + prefect-worker only.
-# bot, dashboard, and the optional llama-server are added in H-03 once those
-# tracks exist (tech design §2.7/§2.8) — no Kubernetes, single host throughout.
+# Services: postgres (required), prefect-server + prefect-worker (required),
+# and llama-server (optional, for local LLM inference via OpenAI-compatible API).
+# bot, dashboard, and other Phase 2+ services are added as tracks exist
+# (tech design §2.7/§2.8) — no Kubernetes, single host throughout.
+#
+# To use llama-server locally: uncomment the llama-server service below and set
+# LLAMA_SERVER_URL=http://llama-server:8080 in .env (or your local URL if running
+# separately, e.g. http://dietpi.eland-platy.ts.net:8082 if running on another host).
 
 services:
   postgres:
@@ -53,6 +58,25 @@ services:
       POSTGRES_DSN: postgresql://knowledge:knowledge@postgres:5432/knowledge
     env_file:
       - .env
+
+  # Optional: local LLM inference via llama.cpp/OpenAI-compatible API.
+  # Uncomment to use; comment out if running llama-server separately.
+  # llama-server:
+  #   image: ghcr.io/ggerganov/llama.cpp:server-latest
+  #   command:
+  #     - "--model=/models/gemma-2-2b-it.gguf"
+  #     - "--host=0.0.0.0"
+  #     - "--port=8080"
+  #     - "--n-gpu-layers=32"
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ~/.cache/huggingface/hub:/models
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/v1/models"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
 
 volumes:
   pgdata:

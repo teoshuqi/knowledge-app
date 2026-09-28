@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from prefect import get_run_logger, task
+from prefect.cache_policies import NO_CACHE
 
 from src.connectors import ConnectorRegistry
 from src.ml.embedding_client import EmbeddingClient
@@ -54,7 +55,7 @@ def _advance_watermark(db: DatabaseConnection, task_name: str, up_to: datetime) 
     )
 
 
-@task(retries=3, retry_delay_seconds=60)
+@task(retries=3, retry_delay_seconds=60, cache_policy=NO_CACHE)
 def fetch_source(db: DatabaseConnection, source_id: str, since: datetime | None = None) -> None:
     """Fetch items from a single source. Upsert into bronze.raw_items with
     watermark tracking. since=None reads watermark; explicit since is a replay.
@@ -96,7 +97,7 @@ def fetch_source(db: DatabaseConnection, source_id: str, since: datetime | None 
     )
 
 
-@task(retries=1)
+@task(retries=1, cache_policy=NO_CACHE)
 def process_batch(
     db: DatabaseConnection,
     llm: LLMClient,
@@ -170,7 +171,7 @@ def process_batch(
         _advance_watermark(db, "process", datetime.now(UTC))
 
 
-@task(retries=1)
+@task(retries=1, cache_policy=NO_CACHE)
 def cluster_stories(db: DatabaseConnection, since: datetime | None = None) -> None:
     """Matches new items against today's batch + currently open stories only
     (§3.3) — never against full history, so this stays cheap regardless of
@@ -218,7 +219,7 @@ def cluster_stories(db: DatabaseConnection, since: datetime | None = None) -> No
         _advance_watermark(db, "cluster", datetime.now(UTC))
 
 
-@task(retries=1)
+@task(retries=1, cache_policy=NO_CACHE)
 def discover_topics(db: DatabaseConnection, llm: LLMClient, window_days: int = 90) -> None:
     """Always a fresh, stateless run over a trailing window from now — not a
     watermark task. Zero-shot-assigns against the *current* active registry

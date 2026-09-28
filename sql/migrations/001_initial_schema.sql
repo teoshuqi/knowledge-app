@@ -16,6 +16,8 @@ CREATE TABLE bronze.raw_items (
     external_id   TEXT NOT NULL,
     raw_payload   JSONB NOT NULL,
     fetch_status  TEXT NOT NULL CHECK (fetch_status IN ('ok', 'error', 'empty')),
+    inserted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when the row landed in bronze, distinct
+                                                        -- from fetched_at (when the connector fetched it)
     UNIQUE (source_id, external_id)             -- re-fetching the same item is a no-op
 );
 CREATE INDEX idx_raw_items_source_fetched ON bronze.raw_items (source_id, fetched_at);

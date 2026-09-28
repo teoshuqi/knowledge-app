@@ -123,9 +123,12 @@ class TestFetchSourceWatermarkSemantics:
 
             fetch_source(mock_db, "netflix_blog", since=datetime(2026, 9, 1, tzinfo=UTC))
 
-            # Should log with replay=True
-            log_call = mock_logger.info.call_args[0]
-            assert "replay=True" in str(log_call)
+            # Lazy %-style logging: call_args[0] is the raw (fmt, *args) tuple,
+            # never pre-formatted into a string - check the format string and
+            # the actual arg value, not a substring of str(the tuple).
+            fmt, *log_args = mock_logger.info.call_args[0]
+            assert "replay=%s" in fmt
+            assert log_args[-1] is True
 
 
 class TestIdempotencySemantics:
@@ -160,7 +163,7 @@ class TestIdempotencySemantics:
             assert "ON CONFLICT (source_id, external_id) DO NOTHING" in sql
 
     def test_fetch_source_counts_inserted_and_deduped(self, mock_db):
-        """fetch_source should track inserted vs deduped items."""
+        """fetch_source should log inserted item count."""
         with patch("src.pipeline.tasks._get_watermark"), patch(
             "src.pipeline.tasks._advance_watermark"
         ), patch("src.pipeline.tasks.ConnectorRegistry") as mock_registry, patch(
@@ -186,20 +189,24 @@ class TestIdempotencySemantics:
 
             fetch_source(mock_db, "netflix_blog", since=None)
 
-            # Should log item counts
-            log_call = mock_logger.info.call_args[0]
-            assert "3 items fetched" in str(log_call) or "inserted=3" in str(log_call)
+            # Lazy %-style logging: check the raw args, not a formatted substring.
+            fmt, source_id, n_fetched, n_inserted, is_replay = (
+                mock_logger.info.call_args[0]
+            )
+            assert n_fetched == 3
+            assert n_inserted == 3
 
     def test_fetch_source_handles_db_errors_gracefully(self, mock_db):
-        """fetch_source should catch DB errors and log them."""
+        """fetch_source retries (retries=3, retry_delay_seconds=60) then
+        propagates a DB error - inserts are idempotent (UNIQUE + ON CONFLICT
+        DO NOTHING), so retrying the whole task after a mid-loop failure is
+        safe and correct, same contract as connector.fetch() errors.
+        """
         with patch("src.pipeline.tasks._get_watermark"), patch(
             "src.pipeline.tasks._advance_watermark"
         ), patch("src.pipeline.tasks.ConnectorRegistry") as mock_registry, patch(
             "src.pipeline.tasks.get_run_logger"
-        ) as mock_logger_factory:
-            mock_logger = MagicMock()
-            mock_logger_factory.return_value = mock_logger
-
+        ):
             mock_connector = MagicMock()
             raw_item = MagicMock()
             raw_item.source_id = "netflix_blog"
@@ -215,8 +222,9 @@ class TestIdempotencySemantics:
             # Mock db.execute to raise OSError
             mock_db.execute.side_effect = OSError("DB connection failed")
 
-            # Should not raise, just log
-            fetch_source(mock_db, "netflix_blog", since=None)
-
-            # Should log exception
-            assert mock_logger.exception.called or mock_logger.warning.called
+            # retry_delay_seconds=0 keeps the real retries=3 but skips the
+            # real 60s-per-attempt wait.
+            with pytest.raises(OSError, match="DB connection failed"):
+                fetch_source.with_options(retry_delay_seconds=0)(
+                    mock_db, "netflix_blog", since=None
+                )
